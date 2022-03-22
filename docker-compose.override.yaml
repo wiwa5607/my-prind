@@ -7,7 +7,7 @@ x-ustreamer-svc: &ustreamer-svc
     - "--port=8080"
     - "--slowdown"
     - "--device=/dev/webcam"
-    - "--resolution=1280x960"
+    - "--resolution=1920x1080"
     - "--format=MJPEG"
     - "--desired-fps=30"
 
@@ -15,7 +15,7 @@ x-ustreamer-svc: &ustreamer-svc
 services:
   klipper:
     devices:
-      - /dev/ttymxc3:/dev/ttymxc3
+      - /dev/serial/by-id/usb-Klipper_stm32f429xx_430027000251303330363837-if00:/dev/serial/by-id/usb-Klipper_stm32f429xx_430027000251303330363837-if00
 
   ustreamer:
     <<: *ustreamer-svc

@@ -1,0 +1,196 @@
+## Common Templates
+x-klipper-svc: &klipper-svc
+  image: mkuf/klipper:nightly
+  container_name: klipper
+  restart: unless-stopped
+  logging:
+    driver: none
+  depends_on:
+    init:
+      condition: service_completed_successfully
+  command:
+    - "-I"
+    - "run/klipper.tty"
+    - "-a"
+    - "run/klipper.sock"
+    - "cfg/printer.cfg"
+    - "-l"
+    - "log/klippy.log"
+
+## Service Definitions
+services:
+
+  ## Klippy Services
+  ##
+  klipper:
+    <<: *klipper-svc
+    volumes:
+      - ./config:/opt/cfg
+      - run:/opt/run
+      - gcode:/opt/gcode
+      - log:/opt/log
+    profiles:
+      - fluidd
+      - mainsail
+
+  klipper-priv:
+    <<: *klipper-svc
+    privileged: true
+    volumes:
+      - /dev:/dev
+      - ./config:/opt/cfg
+      - run:/opt/run
+      - gcode:/opt/gcode
+      - log:/opt/log
+    profiles:
+      - octoprint
+
+  ## WebApi
+  ##
+  moonraker:
+    image: mkuf/moonraker:nightly
+    container_name: moonraker
+    restart: unless-stopped
+    logging:
+      driver: none
+    command:
+      - "-c"
+      - "cfg/moonraker.cfg"
+      - "-l"
+      - "log/moonraker.log"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      klipper:
+        condition: service_started
+      init-moonraker​:
+        condition​: ​service_completed_successfully
+    volumes:
+      - ./config:/opt/cfg
+      - run:/opt/run
+      - gcode:/opt/gcode
+      - log:/opt/log
+      - moonraker-db:/opt/db
+    profiles:
+      - fluidd
+      - mainsail
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.moonraker.loadbalancer.server.port=7125"
+      - "traefik.http.routers.moonraker.rule=PathPrefix(`/websocket`,`/printer`,`/api`,`/access`,`/machine`,`/server`)"
+      - "traefik.http.routers.moonraker.entrypoints=web"
+
+  ## Frontends
+  ##
+  octoprint:
+    image: octoprint/octoprint:minimal
+    container_name: octoprint
+    restart: unless-stopped
+    depends_on:
+      klipper-priv:
+        condition: service_started
+    privileged: true
+    volumes:
+      - /dev:/dev
+      - run:/opt/run
+      - octoprint:/octoprint
+    profiles:
+      - octoprint
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.octoprint.loadbalancer.server.port=5000"
+      - "traefik.http.routers.octoprint.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.octoprint.entrypoints=web"
+
+  fluidd:
+    image: cadriel/fluidd:latest
+    container_name: fluidd
+    restart: unless-stopped
+    profiles:
+      - fluidd
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.fluidd.loadbalancer.server.port=80"
+      - "traefik.http.routers.fluidd.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.fluidd.entrypoints=web"
+
+  mainsail:
+    image: mkuf/mainsail:nightly
+    container_name: mainsail
+    restart: unless-stopped
+    profiles:
+      - mainsail
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.mainsail.loadbalancer.server.port=80"
+      - "traefik.http.routers.mainsail.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.mainsail.entrypoints=web"
+
+  klipperscreen:
+    image: mkuf/klipperscreen:nightly
+    container_name: klipperscreen
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      moonraker:
+        condition: service_started
+    profiles:
+      - klipperscreen
+    command:
+      - "-c"
+      - "cfg/klipperscreen.conf"
+    volumes:
+      - ./config:/opt/cfg
+      - /tmp/.X11-unix:/tmp/.X11-unix
+
+  ## Accompanying Services/Infra
+  ##
+
+  ## Config dir needs to be writable by uid/gid 1000
+  ## This container sets the right permissions and exits
+  init:
+    image: busybox:latest
+    container_name: init
+    command: chown -R 1000:1000 /prind/config
+    volumes:
+      - .:/prind
+
+   #​# Moonraker warns, if certain klipper directories are not accessible 
+   #​# This container copies /opt/klipper from the klipper service to moonraker 
+   #​# https://github.com/mkuf/prind/issues/14 
+  init-moonraker​: 
+    image​: ​docker:latest 
+ ​   container_name​: ​init-moonraker 
+ ​   entrypoint​: ​[] 
+ ​   volumes​: ​["/var/run/docker.sock:/var/run/docker.sock"] 
+ ​   command​: ​| 
+ ​     /bin/sh -c "docker cp klipper:/opt/klipper /tmp docker cp /tmp/klipper moonraker:/opt"
+
+  ## Loadbalancer/Proxy
+  traefik:
+    image: "traefik:v2.5"
+    container_name: "traefik"
+    hostname: "traefik"
+    command:
+      - "--accesslog"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "8185:80"
+    restart: unless-stopped
+    volumes:
+        - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+volumes:
+  run:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+  gcode:
+  octoprint:
+  moonraker-db:
+  log:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
