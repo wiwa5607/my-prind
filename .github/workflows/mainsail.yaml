@@ -5,7 +5,7 @@ on:
     - cron: '0 0 * * 0'
 jobs:
   build:
-    uses: mkuf/prind/.github/workflows/image-workflow.yaml@main
+    uses: wiwa5607/my-prind/.github/workflows/image-workflow.yaml@main
     with:
       app: mainsail
     secrets:
