@@ -2,7 +2,7 @@ name: 'Image: Klipper'
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 0 * * 0'
 jobs:
   build:
     uses: mkuf/prind/.github/workflows/image-workflow.yaml@main
