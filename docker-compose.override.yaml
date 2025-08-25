@@ -10,6 +10,7 @@ x-ustreamer-svc: &ustreamer-svc
     - "--resolution=1280x960"
     - "--format=MJPEG"
     - "--desired-fps=30"
+    - "--flip-vertical"
 
 ## Add your personal config here
 services:
